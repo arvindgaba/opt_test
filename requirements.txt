@@ -1,18 +1,18 @@
-# Core data & maths
-numpy==2.3.2              # fundamental arrays  :contentReference[oaicite:0]{index=0}
-pandas==2.3.1             # dataframes         :contentReference[oaicite:1]{index=1}
+# --- core maths / data ---
+numpy>=2.3,<2.4
+pandas>=2.3,<2.4          # needs the matching NumPy range
 
-# Web-app & UI
-streamlit==1.47.0         # dashboard engine   :contentReference[oaicite:2]{index=2}
-streamlit-autorefresh==1.0.1   # auto-refresh helper  :contentReference[oaicite:3]{index=3}
-plotly==7.0.0             # charts (express)   :contentReference[oaicite:4]{index=4}
+# --- web app & charts ---
+streamlit>=1.47,<2.0
+streamlit-autorefresh>=1.0,<2.0
+plotly>=7.0,<8.0
 
-# Market-data & scraping
-yfinance==0.2.65          # Yahoo Finance API  :contentReference[oaicite:5]{index=5}
-tvdatafeed==2.1.1         # TradingView data   :contentReference[oaicite:6]{index=6}
-cloudscraper==1.2.71      # Cloudflare bypass  :contentReference[oaicite:7]{index=7}
+# --- market data & scraping ---
+yfinance>=0.2,<0.3
+tradingview-datafeed==2.1.1   # provides the tvDatafeed module you import
+cloudscraper>=1.2.71
 
-# General HTTP & SSL
-requests>=2.31.0
-urllib3>=2.2.0
-certifi>=2025.6.15
+# --- networking / SSL (leave unpinned or pin if you want) ---
+requests>=2.31
+urllib3>=2.2
+certifi>=2025.6
