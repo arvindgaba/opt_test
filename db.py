@@ -37,8 +37,8 @@ IMBALANCE_TRIGGER    = 20.0         # %
 VWAP_TOLERANCE_PTS   = 5.0          # alert when |spot - vwap| <= tolerance
 
 # ---- HARD-CODED TradingView credentials (REPLACE THESE) ----
-TV_USERNAME          = "YOUR_TV_USERNAME"
-TV_PASSWORD          = "YOUR_TV_PASSWORD"
+TV_USERNAME          = "dileep.marchetty@gmail.com"
+TV_PASSWORD          = "1dE6Land@123"
 # ============================================================
 
 API_URL  = "https://www.nseindia.com/api/option-chain-indices"
