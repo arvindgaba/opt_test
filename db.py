@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import plotly.express as px
-#import yfinance as yf
+import yfinance as yf
 import certifi
 import requests, urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -33,12 +33,12 @@ VWAP_NOW_TXT         = OUT_DIR / "nifty_vwap_now.txt"
 VWAP_LOG_CSV         = OUT_DIR / "nifty_vwap_log.csv"
 
 MAX_NEIGHBORS_LIMIT  = 20
-IMBALANCE_TRIGGER    = 30.0         # %
+IMBALANCE_TRIGGER    = 20.0         # %
 VWAP_TOLERANCE_PTS   = 5.0          # alert when |spot - vwap| <= tolerance
 
 # ---- HARD-CODED TradingView credentials (REPLACE THESE) ----
-TV_USERNAME = "dileep.marchetty@gmail.com"
-TV_PASSWORD = "1dE6Land@123"
+TV_USERNAME          = "YOUR_TV_USERNAME"
+TV_PASSWORD          = "YOUR_TV_PASSWORD"
 # ============================================================
 
 API_URL  = "https://www.nseindia.com/api/option-chain-indices"
@@ -179,23 +179,15 @@ def fetch_raw_option_chain():
     return None
 
 # ---------------- TradingView helpers ----------------
-def tv_login() -> "TvDatafeed | None":
-    """
-    Return an authenticated TvDatafeed session if credentials are valid.
-    Falls back to anonymous mode so the rest of the app keeps running.
-    """
+def tv_login():
     from tvDatafeed import TvDatafeed
     try:
-        tv = TvDatafeed(username=TV_USERNAME, password=TV_PASSWORD)
+        tv = TvDatafeed(username="dileep.marchetty@gmail.com", password="1dE6Land@123")
         log.info("Logged in to TradingView as %s", TV_USERNAME)
         return tv
     except Exception as e:
-        log.error("TradingView login failed (%s) – continuing without login", e)
-        try:
-            return TvDatafeed()  # anonymous (limited) session
-        except Exception as inner:
-            log.error("Anonymous TV session also failed: %s", inner)
-            return None
+        log.error("TradingView login failed: %s", e)
+        raise
 
 def fetch_tv_1m_session():
     """Fetch latest 1m NIFTY candles from TV, tz-aware IST; retry a few times."""
@@ -575,20 +567,20 @@ def write_vwap_files(stamp: str, vwap_latest: float | None, spot: float | None, 
         log.error("VWAP file write failed: %s", e)
 
 # -----------------------------------------------------------------------------
-# TV loop: pulls 1 minute NIFTY data, upgrades ATM instantly, refreshes imbalance
+# TV‑loop: pulls 1‑minute NIFTY data, upgrades ATM instantly, refreshes imbalance
 # -----------------------------------------------------------------------------
 def tradingview_loop(mem: StoreMem):
     """
-    1. Pull 1 minute candles from TradingView every TV_FETCH_SECONDS.
+    1. Pull 1‑minute candles from TradingView every TV_FETCH_SECONDS.
     2. If a fresh 09:09 IST price appears, update ATM → store → *immediately*
-       rebuild the option chain dataframe so imbalance / suggestion stay current.
-    3. Compute session VWAP (15 minute cumulative) for the dashboard + alert.
-    4. Write a one line status file and append to the rolling VWAP CSV log.
+       rebuild the option‑chain dataframe so imbalance / suggestion stay current.
+    3. Compute session VWAP (15‑minute cumulative) for the dashboard + alert.
+    4. Write a one‑line status file and append to the rolling VWAP CSV log.
     """
 
     while True:
         try:
-            # ---- 1) Get latest 1 minute candles --------------------------------
+            # ---- 1) Get latest 1‑minute candles --------------------------------
             df1 = fetch_tv_1m_session()                       # retry logic inside
 
             # ---- 2) Instant ATM upgrade if 09:09 available --------------------
@@ -606,7 +598,7 @@ def tradingview_loop(mem: StoreMem):
 
                 if needs_upgrade:
                     update_store_atm(atm_guess, base_val, "captured-0909")
-                    log.info("ATM upgraded to %s (base %.2f) by TV loop", atm_guess, base_val)
+                    log.info("ATM upgraded to %s (base %.2f) by TV‑loop", atm_guess, base_val)
 
                     # ---- 2a) Recalculate imbalance right away ----------------
                     raw_now = fetch_raw_option_chain()
@@ -619,10 +611,10 @@ def tradingview_loop(mem: StoreMem):
                         try:
                             df_now.to_csv(CSV_PATH, index=False)
                         except Exception as e:
-                            log.error("CSV write failed (TV trigger): %s", e)
+                            log.error("CSV write failed (TV‑trigger): %s", e)
                         log.info("Imbalance refreshed immediately after ATM upgrade")
 
-            # ---- 3) VWAP (15 minute session cumulative) -----------------------
+            # ---- 3) VWAP (15‑minute session cumulative) -----------------------
             vwap_latest, df15 = compute_session_vwap_15m(df1)
             with mem.lock:
                 mem.last_tv     = now_ist()
