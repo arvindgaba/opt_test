@@ -179,15 +179,23 @@ def fetch_raw_option_chain():
     return None
 
 # ---------------- TradingView helpers ----------------
-def tv_login():
+def tv_login() -> "TvDatafeed | None":
+    """
+    Return an authenticated TvDatafeed session if credentials are valid.
+    Falls back to anonymous mode so the rest of the app keeps running.
+    """
     from tvDatafeed import TvDatafeed
     try:
-        tv = TvDatafeed(username="dileep.marchetty@gmail.com", password="1dE6Land@123")
+        tv = TvDatafeed(username=TV_USERNAME, password=TV_PASSWORD)
         log.info("Logged in to TradingView as %s", TV_USERNAME)
         return tv
     except Exception as e:
-        log.error("TradingView login failed: %s", e)
-        raise
+        log.error("TradingView login failed (%s) – continuing without login", e)
+        try:
+            return TvDatafeed()  # anonymous (limited) session
+        except Exception as inner:
+            log.error("Anonymous TV session also failed: %s", inner)
+            return None
 
 def fetch_tv_1m_session():
     """Fetch latest 1m NIFTY candles from TV, tz-aware IST; retry a few times."""
