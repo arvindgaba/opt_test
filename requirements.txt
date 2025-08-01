@@ -1,8 +1,18 @@
-streamlit>=1.34
-streamlit-autorefresh>=0.1.0
-pandas>=2.2
-plotly>=5.22
-cloudscraper>=1.2.71
-requests>=2.32
-certifi>=2025.5.1
-tvdatafeed @ git+https://github.com/rongardF/tvdatafeed.git
+# Core data & maths
+numpy==2.3.2              # fundamental arrays  :contentReference[oaicite:0]{index=0}
+pandas==2.3.1             # dataframes         :contentReference[oaicite:1]{index=1}
+
+# Web-app & UI
+streamlit==1.47.0         # dashboard engine   :contentReference[oaicite:2]{index=2}
+streamlit-autorefresh==1.0.1   # auto-refresh helper  :contentReference[oaicite:3]{index=3}
+plotly==7.0.0             # charts (express)   :contentReference[oaicite:4]{index=4}
+
+# Market-data & scraping
+yfinance==0.2.65          # Yahoo Finance API  :contentReference[oaicite:5]{index=5}
+tvdatafeed==2.1.1         # TradingView data   :contentReference[oaicite:6]{index=6}
+cloudscraper==1.2.71      # Cloudflare bypass  :contentReference[oaicite:7]{index=7}
+
+# General HTTP & SSL
+requests>=2.31.0
+urllib3>=2.2.0
+certifi>=2025.6.15
