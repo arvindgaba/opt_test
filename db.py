@@ -1,17 +1,28 @@
-# combined_nifty_atm0909_vwap.py  – *rollback version*
+# combined_nifty_atm0909_vwap.py
+# NIFTY ΔOI Imbalance + TradingView VWAP alert
+# - ATM: TV 09:09 → Yahoo daily open (robust, no-verify) → NSE underlying (provisional)
+# - TV loop immediately upgrades ATM when 09:09 appears
+# - Manual ATM override in sidebar
+# - Yahoo 429 tolerant, retries, query1/query2, verify=False
+# - OC loop reloads ATM store every cycle
+# - Weekday neighbors: Fri/Sat/Sun ±5, Mon ±4, Tue ±3, Wed ±2, Thu ±1
+# - VWAP 15m session from TV 1m candles
+# - Full logging + CSV/text outputs
 
-import os, json, time, base64, datetime as dt, pathlib, threading, warnings, logging, sys, random
+import os, json, time, base64, datetime as dt, pathlib, threading, warnings, logging, sys, math, random
 import pandas as pd
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 import plotly.express as px
-import certifi, requests, urllib3
+import yfinance as yf
+import certifi
+import requests, urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# ───────────────────────── USER SETTINGS ─────────────────────────
+# ================= USER SETTINGS =================
 SYMBOL               = "NIFTY"
-FETCH_EVERY_SECONDS  = 60
-TV_FETCH_SECONDS     = 60
+FETCH_EVERY_SECONDS  = 60          # option-chain poll (1 min)
+TV_FETCH_SECONDS     = 60           # TradingView poll (1 min)
 AUTOREFRESH_MS       = 10_000
 
 OUT_DIR              = pathlib.Path.home() / "Documents" / "NSE_output"
@@ -22,15 +33,15 @@ VWAP_NOW_TXT         = OUT_DIR / "nifty_vwap_now.txt"
 VWAP_LOG_CSV         = OUT_DIR / "nifty_vwap_log.csv"
 
 MAX_NEIGHBORS_LIMIT  = 20
-IMBALANCE_TRIGGER    = 30.0     # %
-VWAP_TOLERANCE_PTS   = 5.0      # ± points for alert
+IMBALANCE_TRIGGER    = 30.0         # %
+VWAP_TOLERANCE_PTS   = 5.0          # alert when |spot - vwap| <= tolerance
 
-# ── *Hard-coded* TradingView credentials (as requested) ──
-TV_USERNAME = "dileep.marchetty@gmail.com"   # ← **quote** the string
-TV_PASSWORD = "1dE6Land@123"
-# ─────────────────────────────────────────────────────────
+# ---- HARD-CODED TradingView credentials (REPLACE THESE) ----
+TV_USERNAME          = "YOUR_TV_USERNAME"
+TV_PASSWORD          = "YOUR_TV_PASSWORD"
+# ============================================================
 
-API_URL  = "https://www.nseindia.com/api/option-chain-indices"
+API_URL  = https://www.nseindia.com/api/option-chain-indices
 IST      = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
 BASE_HEADERS = {
@@ -40,58 +51,143 @@ BASE_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Accept": "application/json, text/plain, */*",
     "X-Requested-With": "XMLHttpRequest",
-    "Referer": f"https://www.nseindia.com/option-chain?symbol={SYMBOL}",
+    "Referer": fhttps://www.nseindia.com/option-chain?symbol={SYMBOL},
 }
+
+# ensure certifi is used by libs that honor SSL_CERT_FILE
 os.environ.setdefault("SSL_CERT_FILE", certifi.where())
 
-# ── tiny 0.1 s WAV for alert ─────────────────────────────
-BEEP_WAV_B64 = ("UklGRmYAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAAABhY2NkZGdn"
-                "aGhoaWlpamptbW1tbm5ub29wcHBxcXFycnJzc3N0dHR1dXV2dnZ3d3d4eHh5"
-                "eXl6enp7e3t8fHx9fX1+fn5/f3+AgICAgoKCg4ODhISEhYWFhoaGiIiIkJCQ"
-                "kZGRkpKSlJSUlZWVmZmZmpqamsrKy8vLzMzMzc3Nzs7O0NDQ0dHR0lJSU1NT"
-                "U9PT1NTU1dXV1paWmZmZmpqam5ubnBwcHJycnR0dHZ2dnd3d3h4eXl5enp6f"
-                "Hx8fX19fn5+f39/gICA")
+# --- tiny 0.1s beep WAV (base64) ---
+BEEP_WAV_B64 = (
+    "UklGRmYAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAAABhY2NkZGdn"
+    "aGhoaWlpamptbW1tbm5ub29wcHBxcXFycnJzc3N0dHR1dXV2dnZ3d3d4eHh5"
+    "eXl6enp7e3t8fHx9fX1+fn5/f3+AgICAgoKCg4ODhISEhYWFhoaGiIiIkJCQ"
+    "kZGRkpKSlJSUlZWVmZmZmpqamsrKy8vLzMzMzc3Nzs7O0NDQ0dHR0lJSU1NT"
+    "U9PT1NTU1dXV1paWmZmZmpqam5ubnBwcHJycnR0dHZ2dnd3d3h4eXl5enp6f"
+    "Hx8fX19fn5+f39/gICA"
+)
 
-# ── logging helper (unchanged) ───────────────────────────
+# ---------------- Logging ----------------
 def setup_logger():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("nifty_app")
     logger.setLevel(logging.INFO)
     logger.handlers.clear()
-    fmt = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s: %(message)s",
-                             "%Y-%m-%d %H:%M:%S")
+
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s: %(message)s", "%Y-%m-%d %H:%M:%S")
     fh = logging.FileHandler(LOG_PATH, encoding="utf-8")
     fh.setFormatter(fmt); fh.setLevel(logging.INFO)
     ch = logging.StreamHandler(sys.stdout)
     ch.setFormatter(fmt); ch.setLevel(logging.INFO)
+
     logger.addHandler(fh); logger.addHandler(ch)
     logger.info("Logger initialized. Log file: %s", LOG_PATH)
     return logger
+
 log = setup_logger()
 
-# ─────────── (helper functions unchanged – snipped for brevity) ───────────
-# • now_ist, today_str, round_to_50, new_session, fetch_raw_option_chain, ...
-# • price_at_0909, compute_session_vwap_15m, neighbors_by_weekday, etc.
-# Paste all those helper definitions exactly as in your backup.
+def now_ist() -> dt.datetime:
+    return dt.datetime.now(IST)
 
-# ── TradingView login (only fix = quotes) ────────────────────────────────
-def tv_login():
+def today_str() -> str:
+    return now_ist().strftime("%Y%m%d")
+
+def load_atm_store() -> dict:
+    if ATM_STORE_PATH.exists():
+        try:
+            return json.loads(ATM_STORE_PATH.read_text())
+        except Exception as e:
+            log.error("Failed to read ATM store: %s", e)
+    return {}
+
+def save_atm_store(store: dict):
     try:
-        from tvDatafeed import TvDatafeed
+        ATM_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ATM_STORE_PATH.write_text(json.dumps(store, indent=2))
+    except Exception as e:
+        log.error("Failed to write ATM store: %s", e)
+
+def update_store_atm(atm: int, base_value: float, status: str):
+    """Atomic update of the ATM store (used by both loops)."""
+    store = load_atm_store()
+    store.update({
+        "date": today_str(),
+        "atm_strike": int(atm),
+        "base_value": float(base_value),
+        "atm_status": status
+    })
+    save_atm_store(store)
+    log.info("Store ATM updated -> %s (%s, base=%.2f)", atm, status, base_value)
+
+# ---------------- NSE OPTION-CHAIN ----------------
+def new_session():
+    try:
+        import cloudscraper
+        warnings.filterwarnings("ignore", category=UserWarning, module="cloudscraper")
+        s = cloudscraper.create_scraper(delay=8, browser={'browser':'chrome','platform':'windows'})
+        log.info("Created cloudscraper session")
     except ModuleNotFoundError:
-        log.error("tvDatafeed library missing — `pip install tvDatafeed`")
-        raise
+        import requests as _rq
+        s = _rq.Session()
+        log.warning("cloudscraper not installed; using requests.Session")
+    s.headers.update(BASE_HEADERS)
     try:
-        tv = TvDatafeed(username=TV_USERNAME, password=TV_PASSWORD)
+        s.get(fhttps://www.nseindia.com/option-chain?symbol={SYMBOL}, timeout=8)
+    except Exception as e:
+        log.warning("Handshake to NSE failed (continuing): %s", e)
+    return s
+
+def pick_current_week_expiry(raw: dict) -> str | None:
+    today = now_ist().date()
+    parsed = []
+    for s in raw.get("records", {}).get("expiryDates", []):
+        try:
+            parsed.append((s, dt.datetime.strptime(s, "%d-%b-%Y").date()))
+        except Exception:
+            pass
+    if not parsed:
+        log.error("No expiryDates in JSON.")
+        return None
+    future = [p for p in parsed if p[1] >= today]
+    chosen = min(future, key=lambda x: x[1]) if future else min(parsed, key=lambda x: x[1])
+    return chosen[0]
+
+def round_to_50(x: float) -> int:
+    return int(round(x / 50.0) * 50)
+
+def fetch_raw_option_chain():
+    s = new_session()
+    for i in range(6):
+        try:
+            r = s.get(API_URL, params={"symbol": SYMBOL}, timeout=10)
+            if r.status_code == 200:
+                try:
+                    raw = r.json()
+                    if "records" in raw and "data" in raw["records"]:
+                        log.info("OC fetch OK on attempt %d", i+1)
+                        return raw
+                    else:
+                        log.warning("OC JSON missing keys on attempt %d", i+1)
+                except json.JSONDecodeError as e:
+                    log.warning("OC JSON decode error on attempt %d: %s", i+1, e)
+            else:
+                log.warning("OC HTTP %s on attempt %d", r.status_code, i+1)
+        except Exception as e:
+            log.warning("OC fetch exception on attempt %d: %s", i+1, e)
+        time.sleep(2)
+    log.error("OC fetch failed after retries.")
+    return None
+
+# ---------------- TradingView helpers ----------------
+def tv_login():
+    from tvDatafeed import TvDatafeed
+    try:
+        tv = TvDatafeed(username=dileep.marchetty@gmail.com, password="1dE6Land@123")
         log.info("Logged in to TradingView as %s", TV_USERNAME)
         return tv
     except Exception as e:
         log.error("TradingView login failed: %s", e)
         raise
-
-# ── the rest of your original code remains byte-for-byte identical ──
-# (build_df_with_imbalance, option_chain_loop, tradingview_loop, UI section, …)
-# ------------------------------------------------------------------------
 
 def fetch_tv_1m_session():
     """Fetch latest 1m NIFTY candles from TV, tz-aware IST; retry a few times."""
@@ -154,7 +250,7 @@ def _yahoo_chart_json(symbol_enc: str) -> float | None:
     """Try query1 then query2; return latest available daily open."""
     params = {"range": "10d", "interval": "1d", "includePrePost": "false", "events": "div,split"}
     headers = {"User-Agent": random.choice(_UAS), "Accept": "application/json"}
-    for host in ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"):
+    for host in (https://query1.finance.yahoo.com, https://query2.finance.yahoo.com):
         url = f"{host}/v8/finance/chart/{symbol_enc}"
         r = requests.get(url, params=params, headers=headers, timeout=15, verify=False)
         if r.status_code == 429:
