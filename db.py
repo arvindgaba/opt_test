@@ -182,7 +182,7 @@ def fetch_raw_option_chain():
 def tv_login():
     from tvDatafeed import TvDatafeed
     try:
-        tv = TvDatafeed(username=dileep.marchetty@gmail.com, password="1dE6Land@123")
+        tv = TvDatafeed(username="dileep.marchetty@gmail.com", password="1dE6Land@123")
         log.info("Logged in to TradingView as %s", TV_USERNAME)
         return tv
     except Exception as e:
