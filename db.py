@@ -41,7 +41,7 @@ TV_USERNAME          = "YOUR_TV_USERNAME"
 TV_PASSWORD          = "YOUR_TV_PASSWORD"
 # ============================================================
 
-API_URL  = https://www.nseindia.com/api/option-chain-indices
+API_URL  = "https://www.nseindia.com/api/option-chain-indices"
 IST      = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
 BASE_HEADERS = {
@@ -51,7 +51,7 @@ BASE_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
     "Accept": "application/json, text/plain, */*",
     "X-Requested-With": "XMLHttpRequest",
-    "Referer": fhttps://www.nseindia.com/option-chain?symbol={SYMBOL},
+    "Referer": f"https://www.nseindia.com/option-chain?symbol={SYMBOL}",
 }
 
 # ensure certifi is used by libs that honor SSL_CERT_FILE
@@ -132,7 +132,7 @@ def new_session():
         log.warning("cloudscraper not installed; using requests.Session")
     s.headers.update(BASE_HEADERS)
     try:
-        s.get(fhttps://www.nseindia.com/option-chain?symbol={SYMBOL}, timeout=8)
+        s.get(f"https://www.nseindia.com/option-chain?symbol={SYMBOL}", timeout=8)
     except Exception as e:
         log.warning("Handshake to NSE failed (continuing): %s", e)
     return s
@@ -250,7 +250,7 @@ def _yahoo_chart_json(symbol_enc: str) -> float | None:
     """Try query1 then query2; return latest available daily open."""
     params = {"range": "10d", "interval": "1d", "includePrePost": "false", "events": "div,split"}
     headers = {"User-Agent": random.choice(_UAS), "Accept": "application/json"}
-    for host in (https://query1.finance.yahoo.com, https://query2.finance.yahoo.com):
+    for host in ("https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"):
         url = f"{host}/v8/finance/chart/{symbol_enc}"
         r = requests.get(url, params=params, headers=headers, timeout=15, verify=False)
         if r.status_code == 429:
