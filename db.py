@@ -33,8 +33,8 @@ VWAP_NOW_TXT         = OUT_DIR / "nifty_vwap_now.txt"
 VWAP_LOG_CSV         = OUT_DIR / "nifty_vwap_log.csv"
 
 MAX_NEIGHBORS_LIMIT  = 20
-IMBALANCE_TRIGGER    = 20.0         # %
-VWAP_TOLERANCE_PTS   = 5.0          # alert when |spot - vwap| <= tolerance
+IMBALANCE_TRIGGER    = 30.0         # %
+VWAP_TOLERANCE_PTS   = 10.0          # alert when |spot - vwap| <= tolerance
 
 # ---- HARD-CODED TradingView credentials (REPLACE THESE) ----
 TV_USERNAME          = "dileep.marchetty@gmail.com"
