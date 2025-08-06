@@ -72,16 +72,17 @@ def setup_logger():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("nifty_app")
     logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG) 
     logger.handlers.clear()
 
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s: %(message)s", "%Y-%m-%d %H:%M:%S")
     fh = logging.FileHandler(LOG_PATH, encoding="utf-8")
     fh.setFormatter(fmt); fh.setLevel(logging.INFO)
     ch = logging.StreamHandler(sys.stdout)
-    ch.setFormatter(fmt); ch.setLevel(logging.INFO)
-
+    ch.setFormatter(fmt); ch.setLevel(logging.DEBUG)  
     logger.addHandler(fh); logger.addHandler(ch)
     logger.info("Logger initialized. Log file: %s", LOG_PATH)
+    
     return logger
 
 log = setup_logger()
