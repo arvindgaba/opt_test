@@ -689,7 +689,7 @@ with st.sidebar:
     IMB_thr  = st.number_input("Imbalance trigger (%)", value=float(IMBALANCE_TRIGGER), step=1.0)
     st.caption(f"Logs: `{LOG_PATH}`")
     st.caption(f"Latest VWAP: `{VWAP_NOW_TXT}`")
-
+    '''
     st.divider()
     st.subheader("Manual ATM override")
     man_atm = st.number_input("Set ATM strike (multiple of 50)", min_value=0, step=50, value=0)
@@ -699,7 +699,7 @@ with st.sidebar:
             st.success(f"ATM overridden to {int(man_atm)}")
         else:
             st.warning("Enter a positive strike.")
-
+    '''
     if st.button("Show last 80 log lines"):
         try:
             lines = LOG_PATH.read_text(encoding="utf-8").splitlines()[-80:]
