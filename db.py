@@ -148,6 +148,16 @@ def get_0909_close(df_1m: pd.DataFrame):
 
 #END Helpders verify and update ATM at 9:10AM
 
+def rolling_vwap(df: pd.DataFrame, period: int) -> pd.Series:
+    """
+    Calculate rolling (windowed) VWAP for given DataFrame.
+    Assumes df has columns: 'close' and 'volume'.
+    Returns a pandas Series with rolling VWAP. NaN for first (period-1) rows.
+    """
+    price_x_vol = df['close'] * df['volume']
+    vwaps = price_x_vol.rolling(window=period, min_periods=period).sum() / df['volume'].rolling(window=period, min_periods=period).sum()
+    return vwaps
+
 def new_session():
     try:
         import cloudscraper
@@ -613,47 +623,17 @@ def tradingview_loop(mem: StoreMem):
     3. Compute session VWAP (15‑minute cumulative) for the dashboard + alert.
     4. Write a one‑line status file and append to the rolling VWAP CSV log.
     """
-    """
-    while True:
-        try:
-            # ---- 1) Get latest 1‑minute candles --------------------------------
-            df1 = fetch_tv_1m_session()                       # retry logic inside
-
-            # ---- 2) Instant ATM upgrade if 09:09 available --------------------
-            px909 = price_at_0909(df1) if df1 is not None else None
-            if px909 and px909 > 0:
-                base_val   = float(px909)
-                atm_guess  = round_to_50(base_val)
-
-                store = load_atm_store()
-                needs_upgrade = (
-                    store.get("date")        != today_str() or
-                    store.get("atm_status")  != "captured-0909" or
-                    int(store.get("atm_strike", 0)) != atm_guess
-                )
-
-                if needs_upgrade:
-                    update_store_atm(atm_guess, base_val, "captured-0909")
-                    log.info("ATM upgraded to %s (base %.2f) by TV‑loop", atm_guess, base_val)
-
-                    # ---- 2a) Recalculate imbalance right away ----------------
-                    raw_now = fetch_raw_option_chain()
-                    df_now, meta_now = build_df_with_imbalance(raw_now, {})
-                    if not df_now.empty:
-                        with mem.lock:
-                            mem.df_opt   = df_now.copy()
-                            mem.meta_opt = dict(meta_now)
-                            mem.last_opt = now_ist()
-                        try:
-                            df_now.to_csv(CSV_PATH, index=False)
-                        except Exception as e:
-                            log.error("CSV write failed (TV‑trigger): %s", e)
-                        log.info("Imbalance refreshed immediately after ATM upgrade")
-    """
     while True:
         try:
             df1 = fetch_tv_1m_session()  # retry logic inside
-    
+            # --- Calculate rolling VWAP (e.g., 15-period) to match TV VWAP with period ---
+            period = 15  # Or any value to match your TV setting
+            if df1 is not None and not df1.empty:
+                df1['vwap_period15'] = rolling_vwap(df1, period)
+                latest_vwap_period15 = df1['vwap_period15'].iloc[-1]
+                log.info("VWAP with period %d (latest): %.2f", period, latest_vwap_period15)
+
+            
             # ---- Wait until after 9:10AM IST to set ATM from 09:09 candle ----
             if is_after_910am_ist() and finalized_0909_candle(df1):
                 px909 = get_0909_close(df1)
@@ -684,10 +664,7 @@ def tradingview_loop(mem: StoreMem):
                                 df_now.to_csv(CSV_PATH, index=False)
                             except Exception as e:
                                 log.error("CSV write failed (TV‑trigger): %s", e)
-                            log.info("Imbalance refreshed immediately after ATM upgrade")
-    # ...rest of your existing TradingView loop logic...
-
-            
+                            log.info("Imbalance refreshed immediately after ATM upgrade")          
 
             # ---- 3) VWAP (15‑minute session cumulative) -----------------------
             vwap_latest, df15 = compute_session_vwap_15m(df1)
@@ -801,6 +778,9 @@ c2.metric("Last TV pull", last_tv.strftime("%H:%M:%S") if last_tv else "—")
 c3.metric("Spot (underlying)", f"{meta.get('underlying', float('nan')):,.2f}" if meta else "—")
 c4.metric("VWAP (15m session)", f"{vwap_latest:,.2f}" if vwap_latest else "—")
 c5.metric("VWAP tolerance", f"±{VWAP_tol:.0f} pts")
+c6 = st.columns(1)[0]  # or add to your existing column group
+c6.metric(f"VWAP(period={period})", f"{latest_vwap_period15:,.2f}" if not pd.isna(latest_vwap_period15) else "—")
+
 
 if df_live is None or df_live.empty:
     st.warning("Waiting for first successful option-chain fetch…")
