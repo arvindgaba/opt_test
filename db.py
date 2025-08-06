@@ -632,8 +632,13 @@ def tradingview_loop(mem: StoreMem):
             period = 15  # Or any value to match your TV setting
             if df1 is not None and not df1.empty:
                 df1['vwap_period15'] = rolling_vwap(df1, period)
-                latest_vwap_period15 = df1['vwap_period15'].iloc[-1]
-                log.info("VWAP with period %d (latest): %.2f", period, latest_vwap_period15)
+                # Get most recent non-NaN value (if any), else NaN
+                if df1['vwap_period15'].notna().any():
+                    latest_vwap_period15 = df1['vwap_period15'].dropna().iloc[-1]
+                else:
+                    latest_vwap_period15 = float('nan')
+                log.info("VWAP with period %d (latest): %s", period,
+                         f"{latest_vwap_period15:.2f}" if not pd.isna(latest_vwap_period15) else "None")
                 with mem.lock:
                     mem.latest_vwap_period15 = latest_vwap_period15
                     mem.period = period
