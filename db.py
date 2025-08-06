@@ -8,7 +8,7 @@
 # - Weekday neighbors: Fri/Sat/Sun ±5, Mon ±4, Tue ±3, Wed ±2, Thu ±1
 # - VWAP 15m session from TV 1m candles
 # - Full logging + CSV/text outputs
-
+APP_VERSION = "2025-08-06 v1"
 import os, json, time, base64, datetime as dt, pathlib, threading, warnings, logging, sys, math, random
 import pandas as pd
 import streamlit as st
@@ -769,12 +769,15 @@ def tradingview_loop(mem: StoreMem):
         time.sleep(TV_FETCH_SECONDS)
 
 
-#@st.cache_resource
-def start_background() -> StoreMem:
+@st.cache_resource(show_spinner=False)
+def start_background(_v: str = APP_VERSION):
     mem = StoreMem()
-    threading.Thread(target=option_chain_loop, args=(mem,), daemon=True, name="OC-Loop").start()
-    threading.Thread(target=tradingview_loop, args=(mem,), daemon=True, name="TV-Loop").start()
+    threading.Thread(target=option_chain_loop,
+                     args=(mem,), daemon=True, name="OC-Loop").start()
+    threading.Thread(target=tradingview_loop,
+                     args=(mem,), daemon=True, name="TV-Loop").start()
     return mem
+
 
 # ---------------- UI helpers ----------------
 def play_beep_once_on_new_alert(mem: StoreMem, alert_text: str):
