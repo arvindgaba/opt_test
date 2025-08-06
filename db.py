@@ -117,7 +117,7 @@ def update_store_atm(atm: int, base_value: float, status: str):
         "atm_status": status
     })
     save_atm_store(store)
-    log.info("Store ATM updated -> %s (%s, base=%.2f)", atm, status, base_value)
+    log.info("[ATM LOG] Store ATM updated: atm=%s, base=%.2f, status=%s", atm, base_value, status)
 
 # ---------------- NSE OPTION-CHAIN ----------------
 #Helpders verify and update ATM at 9:10AM
@@ -255,14 +255,20 @@ def price_at_0909(df_1m: pd.DataFrame) -> float | None:
     t909 = dt.datetime.combine(latest_date, dt.time(9, 9), tzinfo=IST)
     try:
         if t909 in df_1m.index:
-            return float(df_1m.loc[t909, "close"])
+            px = float(df_1m.loc[t909, "close"])
+            log.info("[ATM LOG] TradingView 09:09 candle close: %.2f", px)
+            return px
         win = df_1m.between_time("09:05", "09:14")
         if not win.empty and win.index.date.max() == latest_date:
             idx = min(win.index, key=lambda t: abs((t - t909).total_seconds()))
-            return float(win.loc[idx, "close"])
+            px = float(win.loc[idx, "close"])
+            log.info("[ATM LOG] TradingView nearest to 09:09 (at %s) close: %.2f", idx.strftime("%H:%M"), px)
+            return px
         t915 = dt.datetime.combine(latest_date, dt.time(9, 15), tzinfo=IST)
         if t915 in df_1m.index:
-            return float(df_1m.loc[t915, "open"])
+            px = float(df_1m.loc[t915, "open"])
+            log.info("[ATM LOG] TradingView 09:15 open used: %.2f", px)
+            return px
     except Exception as e:
         log.error("price_at_0909 error: %s", e)
     return None
@@ -428,12 +434,14 @@ def build_df_with_imbalance(raw: dict, store: dict):
     def capture_today_atm_yahoo_open():
         yopen = yahoo_open_today_ist()
         if yopen and yopen > 0:
+            log.info("[ATM LOG] Yahoo open value: %.2f", yopen)
             base_val = float(yopen)
             guess = round_to_50(base_val)
             atm_local = guess if guess in strikes_all else min(strikes_all, key=lambda x: abs(x - base_val))
             log.info("ATM capture(Yahoo open): base=%.2f atm=%s", base_val, atm_local)
             return int(atm_local), base_val, "captured-yahoo-open"
         return None, None, "capture-failed"
+
 
     def capture_today_atm_underlying():
         base_val = underlying
