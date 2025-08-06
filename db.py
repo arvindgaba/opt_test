@@ -769,7 +769,7 @@ def tradingview_loop(mem: StoreMem):
         time.sleep(TV_FETCH_SECONDS)
 
 
-@st.cache_resource
+#@st.cache_resource
 def start_background() -> StoreMem:
     mem = StoreMem()
     threading.Thread(target=option_chain_loop, args=(mem,), daemon=True, name="OC-Loop").start()
