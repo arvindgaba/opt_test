@@ -148,15 +148,57 @@ def get_0909_close(df_1m: pd.DataFrame):
 
 #END Helpders verify and update ATM at 9:10AM
 
+import numpy as np            # make sure this line is near your other imports
+
 def rolling_vwap(df: pd.DataFrame, period: int) -> pd.Series:
     """
-    Calculate rolling (windowed) VWAP for given DataFrame.
-    Assumes df has columns: 'close' and 'volume'.
-    Returns a pandas Series with rolling VWAP. NaN for first (period-1) rows.
+    Rolling (windowed) VWAP.
+
+    Parameters
+    ----------
+    df : DataFrame with columns ['close', 'volume'].
+    period : int
+        Window length in bars.
+
+    Returns
+    -------
+    pd.Series
+        VWAP for each row; NaN until a full window is available.
     """
-    price_x_vol = df['close'] * df['volume']
-    vwaps = price_x_vol.rolling(window=period, min_periods=period).sum() / df['volume'].rolling(window=period, min_periods=period).sum()
+    # --- basic calculation ---------------------------------------------------
+    price   = pd.to_numeric(df['close'],   errors='coerce')
+    volume  = pd.to_numeric(df['volume'],  errors='coerce')
+
+    pv      = price * volume
+    pv_sum  = pv.rolling(window=period,  min_periods=period).sum()
+    vol_sum = volume.rolling(window=period, min_periods=period).sum()
+
+    vwaps   = pv_sum / vol_sum.replace({0: np.nan})   # avoid div-by-zero
+
+    # --- logging -------------------------------------------------------------
+    try:
+        if vwaps.notna().any():
+            last_val   = vwaps.dropna().iloc[-1]
+            last_index = vwaps.dropna().index[-1]
+            log.debug(
+                "[VWAP-period] window=%s  last=%.2f @ %s  (non-NaN bars=%d/%d)",
+                period,
+                last_val,
+                last_index.strftime("%H:%M"),
+                vwaps.notna().sum(),
+                len(vwaps),
+            )
+        else:
+            log.debug(
+                "[VWAP-period] window=%s — all NaN so far (probably zero volume)",
+                period,
+            )
+    except Exception as e:
+        # Never let logging kill the loop
+        log.debug("[VWAP-period] window=%s — logging error: %s", period, e)
+
     return vwaps
+
 
 def new_session():
     try:
@@ -635,8 +677,10 @@ def tradingview_loop(mem: StoreMem):
                 # Get most recent non-NaN value (if any), else NaN
                 if df1['vwap_period15'].notna().any():
                     latest_vwap_period15 = df1['vwap_period15'].dropna().iloc[-1]
+                    log.info("[VWAP-period] latest %.2f  (period=%d, total bars=%d)", latest_vwap_period15, period, len(df1))
                 else:
                     latest_vwap_period15 = float('nan')
+                    log.info("[VWAP-period] still NaN after %d bars — waiting for valid volume", len(df1))
                 log.info("VWAP with period %d (latest): %s", period,
                          f"{latest_vwap_period15:.2f}" if not pd.isna(latest_vwap_period15) else "None")
                 with mem.lock:
