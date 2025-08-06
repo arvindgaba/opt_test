@@ -120,6 +120,34 @@ def update_store_atm(atm: int, base_value: float, status: str):
     log.info("Store ATM updated -> %s (%s, base=%.2f)", atm, status, base_value)
 
 # ---------------- NSE OPTION-CHAIN ----------------
+#Helpders verify and update ATM at 9:10AM
+def is_after_910am_ist():
+    now = now_ist()
+    return now.hour > 9 or (now.hour == 9 and now.minute >= 10)
+
+def finalized_0909_candle(df_1m: pd.DataFrame):
+    """Returns True if a 09:09 candle is present and nonzero volume."""
+    if df_1m is None or df_1m.empty:
+        return False
+    session_date = df_1m.index.max().date()
+    t909 = dt.datetime.combine(session_date, dt.time(9, 9), tzinfo=IST)
+    if t909 in df_1m.index:
+        vol = df_1m.loc[t909, "volume"]
+        return vol > 0
+    return False
+
+def get_0909_close(df_1m: pd.DataFrame):
+    """Safely return the 09:09 candle close if present and nonzero volume."""
+    session_date = df_1m.index.max().date()
+    t909 = dt.datetime.combine(session_date, dt.time(9, 9), tzinfo=IST)
+    if t909 in df_1m.index:
+        vol = df_1m.loc[t909, "volume"]
+        if vol > 0:
+            return float(df_1m.loc[t909, "close"])
+    return None
+
+#END Helpders verify and update ATM at 9:10AM
+
 def new_session():
     try:
         import cloudscraper
@@ -577,7 +605,7 @@ def tradingview_loop(mem: StoreMem):
     3. Compute session VWAP (15‑minute cumulative) for the dashboard + alert.
     4. Write a one‑line status file and append to the rolling VWAP CSV log.
     """
-
+    """
     while True:
         try:
             # ---- 1) Get latest 1‑minute candles --------------------------------
@@ -613,6 +641,45 @@ def tradingview_loop(mem: StoreMem):
                         except Exception as e:
                             log.error("CSV write failed (TV‑trigger): %s", e)
                         log.info("Imbalance refreshed immediately after ATM upgrade")
+    """
+    while True:
+        try:
+            df1 = fetch_tv_1m_session()  # retry logic inside
+    
+            # ---- Wait until after 9:10AM IST to set ATM from 09:09 candle ----
+            if is_after_910am_ist() and finalized_0909_candle(df1):
+                px909 = get_0909_close(df1)
+                if px909 and px909 > 0:
+                    base_val   = float(px909)
+                    atm_guess  = round_to_50(base_val)
+    
+                    store = load_atm_store()
+                    needs_upgrade = (
+                        store.get("date")        != today_str() or
+                        store.get("atm_status")  != "captured-0909" or
+                        int(store.get("atm_strike", 0)) != atm_guess
+                    )
+    
+                    if needs_upgrade:
+                        update_store_atm(atm_guess, base_val, "captured-0909")
+                        log.info("ATM upgraded to %s (base %.2f) by TV‑loop after 9:10AM", atm_guess, base_val)
+    
+                        # ---- Recalculate imbalance right away ----
+                        raw_now = fetch_raw_option_chain()
+                        df_now, meta_now = build_df_with_imbalance(raw_now, {})
+                        if not df_now.empty:
+                            with mem.lock:
+                                mem.df_opt   = df_now.copy()
+                                mem.meta_opt = dict(meta_now)
+                                mem.last_opt = now_ist()
+                            try:
+                                df_now.to_csv(CSV_PATH, index=False)
+                            except Exception as e:
+                                log.error("CSV write failed (TV‑trigger): %s", e)
+                            log.info("Imbalance refreshed immediately after ATM upgrade")
+    # ...rest of your existing TradingView loop logic...
+
+            
 
             # ---- 3) VWAP (15‑minute session cumulative) -----------------------
             vwap_latest, df15 = compute_session_vwap_15m(df1)
