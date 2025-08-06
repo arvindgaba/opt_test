@@ -565,6 +565,8 @@ def build_df_with_imbalance(raw: dict, store: dict):
 class StoreMem:
     def __init__(self):
         self.lock = threading.Lock()
+        self.latest_vwap_period15: float | None = None
+        self.period: int = 15  # default value
         self.df_opt: pd.DataFrame | None = None
         self.meta_opt: dict = {}
         self.last_opt: dt.datetime | None = None
@@ -632,7 +634,9 @@ def tradingview_loop(mem: StoreMem):
                 df1['vwap_period15'] = rolling_vwap(df1, period)
                 latest_vwap_period15 = df1['vwap_period15'].iloc[-1]
                 log.info("VWAP with period %d (latest): %.2f", period, latest_vwap_period15)
-
+                with mem.lock:
+                    mem.latest_vwap_period15 = latest_vwap_period15
+                    mem.period = period
             
             # ---- Wait until after 9:10AM IST to set ATM from 09:09 candle ----
             if is_after_910am_ist() and finalized_0909_candle(df1):
@@ -768,7 +772,9 @@ with mem.lock:
     vwap_latest = mem.vwap_latest
     last_tv = mem.last_tv
     vwap_alert = mem.vwap_alert
-
+    latest_vwap_period15 = mem.latest_vwap_period15
+    period = mem.period
+    
 st.title("NIFTY Change in OI — Imbalance + VWAP Alert (TradingView)")
 
 # Status row
