@@ -239,7 +239,7 @@ def fetch_tv_1m_session():
     for i in range(1, 5):
         try:
             tv = tv_login()
-            df = tv.get_hist(symbol="NIFTY", exchange="NSE",
+            df = tv.get_hist(symbol="NIFTY!", exchange="NSE",
                              interval=Interval.in_1_minute, n_bars=2000)
             if df is not None and not df.empty:
                 if df.index.tz is None:
