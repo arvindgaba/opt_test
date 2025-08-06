@@ -772,8 +772,12 @@ with mem.lock:
     vwap_latest = mem.vwap_latest
     last_tv = mem.last_tv
     vwap_alert = mem.vwap_alert
-    latest_vwap_period15 = mem.latest_vwap_period15
-    period = mem.period
+    latest_vwap_period15 = getattr(mem, "latest_vwap_period15", None)
+    if latest_vwap_period15 is None:
+        latest_vwap_period15 = float('nan')
+    
+    period = getattr(mem, "period", 15)
+
     
 st.title("NIFTY Change in OI — Imbalance + VWAP Alert (TradingView)")
 
@@ -786,6 +790,7 @@ c4.metric("VWAP (15m session)", f"{vwap_latest:,.2f}" if vwap_latest else "—")
 c5.metric("VWAP tolerance", f"±{VWAP_tol:.0f} pts")
 c6 = st.columns(1)[0]  # or add to your existing column group
 c6.metric(f"VWAP(period={period})", f"{latest_vwap_period15:,.2f}" if not pd.isna(latest_vwap_period15) else "—")
+
 
 
 if df_live is None or df_live.empty:
