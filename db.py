@@ -71,13 +71,13 @@ BEEP_WAV_B64 = (
 def setup_logger():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("nifty_app")
-    logger.setLevel(logging.INFO)
+    #logger.setLevel(logging.INFO)
     logger.setLevel(logging.DEBUG) 
     logger.handlers.clear()
 
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(threadName)s: %(message)s", "%Y-%m-%d %H:%M:%S")
     fh = logging.FileHandler(LOG_PATH, encoding="utf-8")
-    fh.setFormatter(fmt); fh.setLevel(logging.INFO)
+    fh.setFormatter(fmt); fh.setLevel(logging.DEBUG)
     ch = logging.StreamHandler(sys.stdout)
     ch.setFormatter(fmt); ch.setLevel(logging.DEBUG)  
     logger.addHandler(fh); logger.addHandler(ch)
@@ -671,6 +671,12 @@ def tradingview_loop(mem: StoreMem):
     while True:
         try:
             df1 = fetch_tv_1m_session()  # retry logic inside
+            if df1 is not None and not df1.empty:
+                log.debug(
+                    "[VOL] bars with volume>0: %d / %d",
+                    (df1['volume'] > 0).sum(),
+                    len(df1)
+                )
             # --- Calculate rolling VWAP (e.g., 15-period) to match TV VWAP with period ---
             period = 15  # Or any value to match your TV setting
             if df1 is not None and not df1.empty:
